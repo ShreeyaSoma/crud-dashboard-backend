@@ -1,60 +1,46 @@
-# backend/app.py
-
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from pymongo import MongoClient
-from bson import ObjectId
-import os
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # To allow cross-origin requests from frontend
 
-# Connect to MongoDB Atlas
-MONGO_URI = "mongodb+srv://shreeyasoma345:admin@cluster1.bkfxexf.mongodb.net/"
-client = MongoClient(MONGO_URI)
+# MongoDB Connection
+client = MongoClient("mongodb+srv://shreeyasoma345:admin@cluster1.bkfxexf.mongodb.net/")
 db = client["dashboard_app"]
-collection = db["users"]
+collection = db["users_data"]  # ✅ Correct collection name
 
-# Serialize MongoDB document to JSON
-def serialize_user(user):
-    return {
-        "id": str(user["_id"]),
-        "name": user["name"],
-        "email": user["email"],
-        "role": user["role"]
-    }
-
-# Get all users
+# GET all users
 @app.route("/users", methods=["GET"])
 def get_users():
-    users = collection.find()
-    return jsonify([serialize_user(user) for user in users]), 200
+    users = list(collection.find({}, {"_id": 0}))  # Exclude MongoDB ID
+    return jsonify(users)
 
-# Add a new user
+# POST: Add a new user
 @app.route("/users", methods=["POST"])
 def add_user():
     data = request.json
-    result = collection.insert_one(data)
-    new_user = collection.find_one({"_id": result.inserted_id})
-    return jsonify(serialize_user(new_user)), 201
+    collection.insert_one(data)
+    return jsonify({"message": "User added successfully"}), 201
 
-# Update user
-@app.route("/users/<user_id>", methods=["PUT"])
-def update_user(user_id):
+# PUT: Update user by email
+@app.route("/users/<email>", methods=["PUT"])
+def update_user(email):
     data = request.json
-    result = collection.update_one({"_id": ObjectId(user_id)}, {"$set": data})
-    if result.modified_count == 0:
-        return jsonify({"error": "User not found or no change"}), 404
-    updated_user = collection.find_one({"_id": ObjectId(user_id)})
-    return jsonify(serialize_user(updated_user)), 200
+    result = collection.update_one({"email": email}, {"$set": data})
+    if result.modified_count > 0:
+        return jsonify({"message": "User updated successfully"})
+    else:
+        return jsonify({"message": "User not found"}), 404
 
-# Delete user
-@app.route("/users/<user_id>", methods=["DELETE"])
-def delete_user(user_id):
-    result = collection.delete_one({"_id": ObjectId(user_id)})
-    if result.deleted_count == 0:
-        return jsonify({"error": "User not found"}), 404
-    return jsonify({"message": "User deleted"}), 200
+# DELETE: Delete user by email
+@app.route("/users/<email>", methods=["DELETE"])
+def delete_user(email):
+    result = collection.delete_one({"email": email})
+    if result.deleted_count > 0:
+        return jsonify({"message": "User deleted successfully"})
+    else:
+        return jsonify({"message": "User not found"}), 404
 
 if __name__ == "__main__":
-    app.run(port=5000)
+    app.run(debug=True)
